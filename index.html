@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Monitoring 2 ESP Reptile System</title>
+
+  <script type="module">
+
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDt6oDqx2ZZZ3c5h0wrXVwJ5hOAtdmKw1E",
+    databaseURL: "https://gecko-c6df6-default-rtdb.asia-southeast1.firebasedatabase.app",
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  function loadESP(device){
+
+    const refMon = ref(db, "monitoring/" + device);
+
+    onValue(refMon, (snap)=>{
+      const d = snap.val();
+      if(!d) return;
+
+      document.getElementById(device+"_suhu").innerHTML = d.suhu + " °C";
+      document.getElementById(device+"_hum").innerHTML = d.humidity + " %";
+      document.getElementById(device+"_ldr").innerHTML = d.ldr;
+      document.getElementById(device+"_waktu").innerHTML = d.waktu;
+
+      document.getElementById(device+"_uvb").innerHTML =
+        d.uvbStatus ? "<span style='color:#00ff88'>ON</span>" :
+                      "<span style='color:red'>OFF</span>";
+
+      document.getElementById(device+"_blower").innerHTML =
+        d.blowerStatus ? "<span style='color:#00ff88'>ON</span>" :
+                         "<span style='color:red'>OFF</span>";
+    });
+  }
+
+  window.pakanManual = function(device){
+    set(ref(db,"control/"+device+"/pakanManual"),1);
+  }
+
+  loadESP("esp1");
+  loadESP("esp2");
+
+  </script>
+
+  <style>
+    body{
+      background:#111;
+      color:white;
+      font-family:Arial;
+      text-align:center;
+    }
+
+    .card{
+      background:#1e1e1e;
+      padding:20px;
+      margin:20px;
+      border-radius:15px;
+      display:inline-block;
+      width:300px;
+    }
+
+    button{
+      padding:10px 20px;
+      border:none;
+      border-radius:10px;
+      background:#00ff88;
+      font-weight:bold;
+      cursor:pointer;
+    }
+
+    button:hover{
+      background:#00cc66;
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>MONITORING 2 ESP REPTILE SYSTEM</h1>
+
+<!-- ================= ESP1 ================= -->
+<div class="card">
+  <h2>ESP1</h2>
+  Suhu: <b id="esp1_suhu">--</b><br>
+  Humidity: <b id="esp1_hum">--</b><br>
+  LDR: <b id="esp1_ldr">--</b><br>
+  UVB: <b id="esp1_uvb">--</b><br>
+  Blower: <b id="esp1_blower">--</b><br>
+  Waktu: <b id="esp1_waktu">--</b><br><br>
+  <button onclick="pakanManual('esp1')">PAKAN MANUAL</button>
+</div>
+
+<!-- ================= ESP2 ================= -->
+<div class="card">
+  <h2>ESP2</h2>
+  Suhu: <b id="esp2_suhu">--</b><br>
+  Humidity: <b id="esp2_hum">--</b><br>
+  LDR: <b id="esp2_ldr">--</b><br>
+  UVB: <b id="esp2_uvb">--</b><br>
+  Blower: <b id="esp2_blower">--</b><br>
+  Waktu: <b id="esp2_waktu">--</b><br><br>
+  <button onclick="pakanManual('esp2')">PAKAN MANUAL</button>
+</div>
+
+</body>
+</html>
