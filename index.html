@@ -25,6 +25,7 @@ function badge(status){
     : "<span class='off'>OFF</span>";
 }
 
+const lastUpdate = {};
 function loadESP(device){
 
     const refMon = ref(db,"monitoring/"+device);
@@ -33,6 +34,7 @@ function loadESP(device){
 
         const d=snap.val();
         if(!d) return;
+        lastUpdate[device] = Date.now();
 
         document.getElementById(device+"_suhu").innerHTML=d.suhu+" °C";
         document.getElementById(device+"_hum").innerHTML=d.humidity+" %";
@@ -45,6 +47,9 @@ function loadESP(device){
 
         document.getElementById(device+"_temps").style.width=Math.min(d.suhu*2,100)+"%";
         document.getElementById(device+"_hums").style.width=Math.min(d.humidity,100)+"%";
+
+        document.getElementById(device+"_status").innerHTML =
+        "<span class='on'>ONLINE</span>";
     });
 
 }
@@ -59,6 +64,24 @@ window.pakanManual=function(device){
 
 loadESP("esp1");
 loadESP("esp2");
+
+loadESP("esp1");
+loadESP("esp2");
+
+setInterval(() => {
+
+    ["esp1","esp2"].forEach(device => {
+
+        if(!lastUpdate[device] || Date.now() - lastUpdate[device] > 15000){
+
+            document.getElementById(device+"_status").innerHTML =
+            "<span class='off'>OFFLINE</span>";
+
+        }
+
+    });
+
+},1000);
 
 </script>
 
@@ -246,6 +269,12 @@ font-size:15px;
 <div class="card">
 
 <h2>Kandang 1</h2>
+<div class="row">
+    <span>📶 Status</span>
+    <div id="esp1_status">
+        <span class="off">OFFLINE</span>
+    </div>
+</div>
 
 <div class="row">
 <span>🌡 Suhu</span>
@@ -294,6 +323,12 @@ font-size:15px;
 <div class="card">
 
 <h2>kandang 2</h2>
+<div class="row">
+    <span>📶 Status</span>
+    <div id="esp2_status">
+        <span class="off">OFFLINE</span>
+    </div>
+</div>
 
 <div class="row">
 <span>🌡 Suhu</span>
