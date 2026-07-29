@@ -1,111 +1,348 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Monitoring 2 ESP Reptile System</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <script type="module">
+<title>Reptile Monitoring System</title>
 
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+<script type="module">
 
-  const firebaseConfig = {
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const firebaseConfig = {
     apiKey: "AIzaSyDt6oDqx2ZZZ3c5h0wrXVwJ5hOAtdmKw1E",
-    databaseURL: "https://gecko-c6df6-default-rtdb.asia-southeast1.firebasedatabase.app",
-  };
+    databaseURL:"https://gecko-c6df6-default-rtdb.asia-southeast1.firebasedatabase.app"
+};
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-  function loadESP(device){
+function badge(status){
+    return status
+    ? "<span class='on'>ON</span>"
+    : "<span class='off'>OFF</span>";
+}
 
-    const refMon = ref(db, "monitoring/" + device);
+function loadESP(device){
 
-    onValue(refMon, (snap)=>{
-      const d = snap.val();
-      if(!d) return;
+    const refMon = ref(db,"monitoring/"+device);
 
-      document.getElementById(device+"_suhu").innerHTML = d.suhu + " °C";
-      document.getElementById(device+"_hum").innerHTML = d.humidity + " %";
-      document.getElementById(device+"_ldr").innerHTML = d.ldr;
-      document.getElementById(device+"_waktu").innerHTML = d.waktu;
+    onValue(refMon,(snap)=>{
 
-      document.getElementById(device+"_uvb").innerHTML =
-        d.uvbStatus ? "<span style='color:#00ff88'>ON</span>" :
-                      "<span style='color:red'>OFF</span>";
+        const d=snap.val();
+        if(!d) return;
 
-      document.getElementById(device+"_blower").innerHTML =
-        d.blowerStatus ? "<span style='color:#00ff88'>ON</span>" :
-                         "<span style='color:red'>OFF</span>";
+        document.getElementById(device+"_suhu").innerHTML=d.suhu+" °C";
+        document.getElementById(device+"_hum").innerHTML=d.humidity+" %";
+        document.getElementById(device+"_waktu").innerHTML=d.waktu;
+
+        document.getElementById(device+"_uvb").innerHTML=badge(d.uvbStatus);
+        document.getElementById(device+"_ldr").innerHTML =
+         d.ldr + " (" + (d.ldrStatus || "--") + ")";
+        document.getElementById(device+"_blower").innerHTML=badge(d.blowerStatus);
+
+        document.getElementById(device+"_temps").style.width=Math.min(d.suhu*2,100)+"%";
+        document.getElementById(device+"_hums").style.width=Math.min(d.humidity,100)+"%";
     });
-  }
 
-  window.pakanManual = function(device){
+}
+
+window.pakanManual=function(device){
+
     set(ref(db,"control/"+device+"/pakanManual"),1);
-  }
 
-  loadESP("esp1");
-  loadESP("esp2");
+    alert("Pakan Manual "+device+" dikirim!");
 
-  </script>
+}
 
-  <style>
-    body{
-      background:#111;
-      color:white;
-      font-family:Arial;
-      text-align:center;
-    }
+loadESP("esp1");
+loadESP("esp2");
 
-    .card{
-      background:#1e1e1e;
-      padding:20px;
-      margin:20px;
-      border-radius:15px;
-      display:inline-block;
-      width:300px;
-    }
+</script>
 
-    button{
-      padding:10px 20px;
-      border:none;
-      border-radius:10px;
-      background:#00ff88;
-      font-weight:bold;
-      cursor:pointer;
-    }
+<style>
 
-    button:hover{
-      background:#00cc66;
-    }
-  </style>
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:Segoe UI,Arial,sans-serif;
+}
+
+.ldrStatus{
+    display:inline-block;
+    margin-top:4px;
+    padding:4px 10px;
+    border-radius:12px;
+    font-size:13px;
+    font-weight:bold;
+    background:#2b3445;
+}
+
+body{
+
+background:linear-gradient(135deg,#101820,#182848);
+min-height:100vh;
+color:white;
+padding:20px;
+
+}
+
+h1{
+
+text-align:center;
+margin-bottom:30px;
+font-size:35px;
+letter-spacing:2px;
+
+}
+
+.container{
+
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+gap:25px;
+
+}
+
+.card{
+
+background:#1f2937;
+border-radius:20px;
+padding:25px;
+box-shadow:0 10px 25px rgba(0,0,0,.5);
+transition:.3s;
+
+}
+
+.card:hover{
+
+transform:translateY(-6px);
+
+}
+
+.card h2{
+
+text-align:center;
+margin-bottom:20px;
+color:#00ffc3;
+
+}
+
+.row{
+
+display:flex;
+justify-content:space-between;
+margin:12px 0;
+font-size:18px;
+
+}
+
+.progress{
+
+height:8px;
+background:#444;
+border-radius:20px;
+overflow:hidden;
+margin-bottom:15px;
+
+}
+
+.fill{
+
+height:100%;
+width:0%;
+background:linear-gradient(90deg,#00ff9d,#00c3ff);
+
+}
+
+button{
+
+width:100%;
+margin-top:20px;
+padding:15px;
+font-size:17px;
+border:none;
+border-radius:15px;
+background:#00d084;
+color:white;
+font-weight:bold;
+cursor:pointer;
+transition:.3s;
+
+}
+
+button:hover{
+
+background:#00a86b;
+transform:scale(1.03);
+
+}
+
+.on{
+
+background:#16a34a;
+padding:5px 15px;
+border-radius:20px;
+
+}
+
+.off{
+
+background:#dc2626;
+padding:5px 15px;
+border-radius:20px;
+
+}
+
+.footer{
+
+text-align:center;
+margin-top:30px;
+opacity:.7;
+
+}
+
+@media(max-width:600px){
+
+h1{
+
+font-size:25px;
+
+}
+
+.row{
+
+font-size:16px;
+
+}
+
+.card{
+
+padding:18px;
+
+}
+
+button{
+
+font-size:15px;
+
+}
+
+}
+
+</style>
+
 </head>
 
 <body>
 
-<h1>MONITORING 2 ESP REPTILE SYSTEM</h1>
+<h1>🦎 REPTILE MONITORING SYSTEM</h1>
 
-<!-- ================= ESP1 ================= -->
+<div class="container">
+
 <div class="card">
-  <h2>ESP1</h2>
-  Suhu: <b id="esp1_suhu">--</b><br>
-  Humidity: <b id="esp1_hum">--</b><br>
-  LDR: <b id="esp1_ldr">--</b><br>
-  UVB: <b id="esp1_uvb">--</b><br>
-  Blower: <b id="esp1_blower">--</b><br>
-  Waktu: <b id="esp1_waktu">--</b><br><br>
-  <button onclick="pakanManual('esp1')">PAKAN MANUAL</button>
+
+<h2>Kandang 1</h2>
+
+<div class="row">
+<span>🌡 Suhu</span>
+<b id="esp1_suhu">--</b>
 </div>
 
-<!-- ================= ESP2 ================= -->
+<div class="progress">
+<div class="fill" id="esp1_temps"></div>
+</div>
+
+<div class="row">
+<span>💧 Humidity</span>
+<b id="esp1_hum">--</b>
+</div>
+
+<div class="progress">
+<div class="fill" id="esp1_hums"></div>
+</div>
+
+<div class="row">
+<span>☀ LDR</span>
+<b id="esp1_ldr">--</b>
+</div>
+
+<div class="row">
+<span>💡 UVB</span>
+<div id="esp1_uvb">--</div>
+</div>
+
+<div class="row">
+<span>🌪 Blower</span>
+<div id="esp1_blower">--</div>
+</div>
+
+<div class="row">
+<span>🕒 Waktu</span>
+<b id="esp1_waktu">--</b>
+</div>
+
+<button onclick="pakanManual('esp1')">
+🍽 PAKAN MANUAL
+</button>
+
+</div>
+
 <div class="card">
-  <h2>ESP2</h2>
-  Suhu: <b id="esp2_suhu">--</b><br>
-  Humidity: <b id="esp2_hum">--</b><br>
-  LDR: <b id="esp2_ldr">--</b><br>
-  UVB: <b id="esp2_uvb">--</b><br>
-  Blower: <b id="esp2_blower">--</b><br>
-  Waktu: <b id="esp2_waktu">--</b><br><br>
-  <button onclick="pakanManual('esp2')">PAKAN MANUAL</button>
+
+<h2>kandang 2</h2>
+
+<div class="row">
+<span>🌡 Suhu</span>
+<b id="esp2_suhu">--</b>
+</div>
+
+<div class="progress">
+<div class="fill" id="esp2_temps"></div>
+</div>
+
+<div class="row">
+<span>💧 Humidity</span>
+<b id="esp2_hum">--</b>
+</div>
+
+<div class="progress">
+<div class="fill" id="esp2_hums"></div>
+</div>
+
+<div class="row">
+<span>☀ LDR</span>
+<b id="esp2_ldr">--</b>
+</div>
+
+<div class="row">
+<span>💡 UVB</span>
+<div id="esp2_uvb">--</div>
+</div>
+
+<div class="row">
+<span>🌪 Blower</span>
+<div id="esp2_blower">--</div>
+</div>
+
+<div class="row">
+<span>🕒 Waktu</span>
+<b id="esp2_waktu">--</b>
+</div>
+
+<button onclick="pakanManual('esp2')">
+🍽 PAKAN MANUAL
+</button>
+
+</div>
+
+</div>
+
+<div class="footer">
+Realtime Firebase Monitoring • ESP32 • Responsive Web
 </div>
 
 </body>
