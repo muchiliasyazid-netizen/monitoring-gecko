@@ -72,7 +72,7 @@ setInterval(() => {
 
     ["esp1","esp2"].forEach(device => {
 
-        if(!lastUpdate[device] || Date.now() - lastUpdate[device] > 6000){
+        if(!lastUpdate[device] || Date.now() - lastUpdate[device] > 10000){
 
             document.getElementById(device+"_status").innerHTML =
             "<span class='off'>OFFLINE</span>";
