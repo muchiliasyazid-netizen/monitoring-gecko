@@ -21,35 +21,51 @@ const db = getDatabase(app);
 
 function badge(status){
     return status
-    ? "<span class='on'>ON</span>"
-    : "<span class='off'>OFF</span>";
+        ? "<span class='on'>ON</span>"
+        : "<span class='off'>OFF</span>";
 }
 
 const lastUpdate = {};
+
 function loadESP(device){
 
     const refMon = ref(db,"monitoring/"+device);
 
     onValue(refMon,(snap)=>{
 
-        const d=snap.val();
+        const d = snap.val();
         if(!d) return;
-        lastUpdate[device] = Date.now();
 
-        document.getElementById(device+"_suhu").innerHTML=d.suhu+" °C";
-        document.getElementById(device+"_hum").innerHTML=d.humidity+" %";
-        document.getElementById(device+"_waktu").innerHTML=d.waktu;
+        lastUpdate[device]=Date.now();
 
-        document.getElementById(device+"_heatpad").innerHTML=badge(d.heatpadStatus);
-        document.getElementById(device+"_ldr").innerHTML = d.ldr;
-        document.getElementById(device+"_ldrStatus").innerHTML = d.ldrStatus || "--";
-        document.getElementById(device+"_blower").innerHTML=badge(d.blowerStatus);
+        const suhu=document.getElementById(device+"_suhu");
+        const hum=document.getElementById(device+"_hum");
+        const ldr=document.getElementById(device+"_ldr");
+        const ldrStatus=document.getElementById(device+"_ldrStatus");
+        const heatpad=document.getElementById(device+"_heatpad");
+        const blower=document.getElementById(device+"_blower");
+        const waktu=document.getElementById(device+"_waktu");
+        const status=document.getElementById(device+"_status");
+        const tempBar=document.getElementById(device+"_temps");
+        const humBar=document.getElementById(device+"_hums");
 
-        document.getElementById(device+"_temps").style.width=Math.min(d.suhu*2,100)+"%";
-        document.getElementById(device+"_hums").style.width=Math.min(d.humidity,100)+"%";
+        if(suhu) suhu.innerHTML=(d.suhu ?? "--")+" °C";
+        if(hum) hum.innerHTML=(d.humidity ?? "--")+" %";
+        if(ldr) ldr.innerHTML=d.ldr ?? "--";
+        if(ldrStatus) ldrStatus.innerHTML=d.ldrStatus ?? "--";
+        if(heatpad) heatpad.innerHTML=badge(d.heatpadStatus);
+        if(blower) blower.innerHTML=badge(d.blowerStatus);
+        if(waktu) waktu.innerHTML=d.waktu ?? "--";
 
-        document.getElementById(device+"_status").innerHTML =
-        "<span class='on'>ONLINE</span>";
+        if(tempBar)
+            tempBar.style.width=Math.min((d.suhu||0)*2,100)+"%";
+
+        if(humBar)
+            humBar.style.width=Math.min((d.humidity||0),100)+"%";
+
+        if(status)
+            status.innerHTML="<span class='on'>ONLINE</span>";
+
     });
 
 }
@@ -58,23 +74,21 @@ window.pakanManual=function(device){
 
     set(ref(db,"control/"+device+"/pakanManual"),1);
 
-    alert("Pakan Manual "+device+" dikirim!");
+    alert("Perintah pakan manual berhasil dikirim ke "+device);
 
 }
 
 loadESP("esp1");
 loadESP("esp2");
 
-setInterval(() => {
+setInterval(()=>{
 
-    ["esp1","esp2"].forEach(device => {
+    ["esp1","esp2"].forEach(device=>{
 
-        if(!lastUpdate[device] || Date.now() - lastUpdate[device] > 15000){
+        const el=document.getElementById(device+"_status");
 
-            document.getElementById(device+"_status").innerHTML =
-            "<span class='off'>OFFLINE</span>";
-
-        }
+        if(el && (!lastUpdate[device] || Date.now()-lastUpdate[device]>15000))
+            el.innerHTML="<span class='off'>OFFLINE</span>";
 
     });
 
@@ -91,164 +105,120 @@ box-sizing:border-box;
 font-family:Segoe UI,Arial,sans-serif;
 }
 
-.ldrStatus{
-    display:inline-block;
-    margin-top:4px;
-    padding:4px 10px;
-    border-radius:12px;
-    font-size:13px;
-    font-weight:bold;
-    background:#2b3445;
-}
-
 body{
-
 background:linear-gradient(135deg,#101820,#182848);
 min-height:100vh;
-color:white;
 padding:20px;
-
+color:white;
 }
 
 h1{
-
 text-align:center;
 margin-bottom:30px;
 font-size:35px;
 letter-spacing:2px;
-
 }
 
 .container{
-
 display:grid;
-grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+grid-template-columns:repeat(auto-fit,minmax(340px,1fr));
 gap:25px;
-
 }
 
 .card{
-
 background:#1f2937;
-border-radius:20px;
 padding:25px;
-box-shadow:0 10px 25px rgba(0,0,0,.5);
+border-radius:20px;
+box-shadow:0 10px 25px rgba(0,0,0,.45);
 transition:.3s;
-
 }
 
 .card:hover{
-
-transform:translateY(-6px);
-
+transform:translateY(-5px);
 }
 
 .card h2{
-
 text-align:center;
 margin-bottom:20px;
 color:#00ffc3;
-
 }
 
 .row{
-
 display:flex;
 justify-content:space-between;
+align-items:center;
 margin:12px 0;
 font-size:18px;
-
 }
 
 .progress{
-
 height:8px;
 background:#444;
 border-radius:20px;
 overflow:hidden;
 margin-bottom:15px;
-
 }
 
 .fill{
-
 height:100%;
 width:0%;
 background:linear-gradient(90deg,#00ff9d,#00c3ff);
-
+transition:.4s;
 }
 
 button{
-
 width:100%;
 margin-top:20px;
-padding:15px;
-font-size:17px;
+padding:14px;
 border:none;
 border-radius:15px;
 background:#00d084;
 color:white;
+font-size:17px;
 font-weight:bold;
 cursor:pointer;
 transition:.3s;
-
 }
 
 button:hover{
-
 background:#00a86b;
 transform:scale(1.03);
-
 }
 
 .on{
-
 background:#16a34a;
 padding:5px 15px;
 border-radius:20px;
-
 }
 
 .off{
-
 background:#dc2626;
 padding:5px 15px;
 border-radius:20px;
-
 }
 
 .footer{
-
 text-align:center;
 margin-top:30px;
-opacity:.7;
-
+opacity:.75;
 }
 
 @media(max-width:600px){
 
 h1{
-
 font-size:25px;
-
 }
 
 .row{
-
 font-size:16px;
-
 }
 
 .card{
-
 padding:18px;
-
 }
 
 button{
-
 font-size:15px;
-
 }
 
 }
@@ -262,15 +232,17 @@ font-size:15px;
 <h1>🦎 REPTILE MONITORING SYSTEM</h1>
 
 <div class="container">
+<!-- ================= ESP 1 ================= -->
 
 <div class="card">
 
-<h2>Kandang 1</h2>
+<h2>🦎 Kandang 1</h2>
+
 <div class="row">
-    <span>📶 Status</span>
-    <div id="esp1_status">
-        <span class="off">OFFLINE</span>
-    </div>
+<span>📶 Status ESP</span>
+<div id="esp1_status">
+<span class="off">OFFLINE</span>
+</div>
 </div>
 
 <div class="row">
@@ -292,22 +264,31 @@ font-size:15px;
 </div>
 
 <div class="row">
+<span>☀ Nilai LDR</span>
+<b id="esp1_ldr">--</b>
+</div>
+
+<div class="row">
 <span>🌞 Status LDR</span>
 <b id="esp1_ldrStatus">--</b>
 </div>
 
 <div class="row">
 <span>🔥 Heatpad</span>
-<div id="esp1_heatpad">--</div>
+<div id="esp1_heatpad">
+<span class="off">OFF</span>
+</div>
 </div>
 
 <div class="row">
 <span>🌪 Blower</span>
-<div id="esp1_blower">--</div>
+<div id="esp1_blower">
+<span class="off">OFF</span>
+</div>
 </div>
 
 <div class="row">
-<span>🕒 Waktu</span>
+<span>🕒 Waktu RTC</span>
 <b id="esp1_waktu">--</b>
 </div>
 
@@ -317,14 +298,18 @@ font-size:15px;
 
 </div>
 
+
+<!-- ================= ESP 2 ================= -->
+
 <div class="card">
 
-<h2>kandang 2</h2>
+<h2>🦎 Kandang 2</h2>
+
 <div class="row">
-    <span>📶 Status</span>
-    <div id="esp2_status">
-        <span class="off">OFFLINE</span>
-    </div>
+<span>📶 Status ESP</span>
+<div id="esp2_status">
+<span class="off">OFFLINE</span>
+</div>
 </div>
 
 <div class="row">
@@ -346,22 +331,31 @@ font-size:15px;
 </div>
 
 <div class="row">
+<span>☀ Nilai LDR</span>
+<b id="esp2_ldr">--</b>
+</div>
+
+<div class="row">
 <span>🌞 Status LDR</span>
 <b id="esp2_ldrStatus">--</b>
 </div>
 
 <div class="row">
 <span>🔥 Heatpad</span>
-<div id="esp2_heatpad">--</div>
+<div id="esp2_heatpad">
+<span class="off">OFF</span>
+</div>
 </div>
 
 <div class="row">
 <span>🌪 Blower</span>
-<div id="esp2_blower">--</div>
+<div id="esp2_blower">
+<span class="off">OFF</span>
+</div>
 </div>
 
 <div class="row">
-<span>🕒 Waktu</span>
+<span>🕒 Waktu RTC</span>
 <b id="esp2_waktu">--</b>
 </div>
 
@@ -372,10 +366,72 @@ font-size:15px;
 </div>
 
 </div>
-
 <div class="footer">
-Realtime Firebase Monitoring • ESP32 • Responsive Web
+🦎 Reptile Monitoring System<br>
+ESP32 • Firebase Realtime Database • Responsive Dashboard
 </div>
+
+<script>
+
+// ========================
+// WARNA STATUS LDR
+// ========================
+function updateLDRColor(device,status){
+
+    const el=document.getElementById(device+"_ldrStatus");
+    if(!el) return;
+
+    switch(status){
+
+        case "Gelap":
+            el.style.color="#ffffff";
+            el.style.background="#000000";
+            break;
+
+        case "Redup":
+            el.style.color="#000";
+            el.style.background="#facc15";
+            break;
+
+        case "Terang":
+            el.style.color="#fff";
+            el.style.background="#22c55e";
+            break;
+
+        case "SangatTerang":
+            el.style.color="#000";
+            el.style.background="#38bdf8";
+            break;
+
+        default:
+            el.style.color="#fff";
+            el.style.background="#6b7280";
+    }
+
+    el.style.padding="5px 12px";
+    el.style.borderRadius="20px";
+}
+
+// ========================
+// UPDATE WARNA STATUS
+// ========================
+["esp1","esp2"].forEach(device=>{
+
+    const refMon=ref(db,"monitoring/"+device);
+
+    onValue(refMon,(snap)=>{
+
+        const d=snap.val();
+
+        if(!d) return;
+
+        updateLDRColor(device,d.ldrStatus);
+
+    });
+
+});
+
+</script>
 
 </body>
 </html>
