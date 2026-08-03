@@ -51,7 +51,7 @@ function loadESP(device){
 
         if(suhu) suhu.innerHTML=(d.suhu ?? "--")+" °C";
         if(hum) hum.innerHTML=(d.humidity ?? "--")+" %";
-        if(ldr) ldr.innerHTML=d.ldr ?? "--";
+        if (ldr) ldr.innerHTML = (d.ldr ?? "--") + " %";
         if(ldrStatus) ldrStatus.innerHTML=d.ldrStatus ?? "--";
         if(heatpad) heatpad.innerHTML=badge(d.heatpadStatus);
         if(blower) blower.innerHTML=badge(d.blowerStatus);
@@ -383,29 +383,30 @@ function updateLDRColor(device,status){
 
     switch(status){
 
-        case "Gelap":
-            el.style.color="#ffffff";
-            el.style.background="#000000";
-            break;
+   case "Gelap":
+    el.style.background="#1f2937";   // Abu gelap
+    el.style.color="#fff";
+    break;
 
-        case "Redup":
-            el.style.color="#000";
-            el.style.background="#facc15";
-            break;
+case "Redup":
+    el.style.background="#f59e0b";   // Kuning
+    el.style.color="#000";
+    break;
 
-        case "Terang":
-            el.style.color="#fff";
-            el.style.background="#22c55e";
-            break;
+case "Terang":
+    el.style.background="#22c55e";   // Hijau
+    el.style.color="#fff";
+    break;
 
-        case "SangatTerang":
-            el.style.color="#000";
-            el.style.background="#38bdf8";
-            break;
+case "Sangat Terang":
+    el.style.background="#fde047";   // Kuning terang
+    el.style.color="#000";
+    break;
 
-        default:
-            el.style.color="#fff";
-            el.style.background="#6b7280";
+    default:
+        el.style.color="#fff";
+        el.style.background="#6b7280";
+
     }
 
     el.style.padding="5px 12px";
