@@ -6,6 +6,8 @@
 
 <title>Reptile Monitoring System</title>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -26,6 +28,97 @@ function badge(status){
 }
 
 const lastUpdate = {};
+const tempHistory = {
+    esp1: {labels: [], values: [], lastRecorded: 0},
+    esp2: {labels: [], values: [], lastRecorded: 0}
+};
+const tempCharts = {};
+const TEMP_GRAPH_INTERVAL = 5 * 60 * 1000; // 5 menit
+
+function initTempChart(device){
+    const canvas = document.getElementById(device+"_tempChart");
+    if(!canvas) return;
+
+    tempCharts[device] = new Chart(canvas, {
+        type: "line",
+        data: {
+            labels: [],
+            datasets: [{
+                label: "Suhu (°C)",
+                data: [],
+                borderWidth: 2,
+                tension: 0.35,
+                fill: false,
+                pointRadius: 2,
+                pointHoverRadius: 5
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+                legend: {
+                    display: true
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: "Waktu"
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: "Suhu (°C)"
+                    },
+                    suggestedMin: 15,
+                    suggestedMax: 40
+                }
+            }
+        }
+    });
+}
+
+function updateTempChart(device, suhu, waktu){
+    const value = Number(suhu);
+    if(!Number.isFinite(value)) return;
+
+    const now = Date.now();
+    const history = tempHistory[device];
+
+    // Grafik hanya mengambil 1 data setiap 5 menit.
+    if(history.lastRecorded !== 0 &&
+       now - history.lastRecorded < TEMP_GRAPH_INTERVAL){
+        return;
+    }
+
+    history.lastRecorded = now;
+
+    const label = waktu || new Date().toLocaleTimeString("id-ID", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+    });
+
+    history.labels.push(label);
+    history.values.push(value);
+
+    // Menampilkan maksimal 30 data terbaru agar grafik tetap ringan.
+    if(history.labels.length > 30){
+        history.labels.shift();
+        history.values.shift();
+    }
+
+    const chart = tempCharts[device];
+    if(chart){
+        chart.data.labels = history.labels;
+        chart.data.datasets[0].data = history.values;
+        chart.update("none");
+    }
+}
 
 function loadESP(device){
 
@@ -50,6 +143,7 @@ function loadESP(device){
         const humBar=document.getElementById(device+"_hums");
 
         if(suhu) suhu.innerHTML=(d.suhu ?? "--")+" °C";
+         updateTempChart(device, d.suhu, d.waktu);
         if(hum) hum.innerHTML=(d.humidity ?? "--")+" %";
         if (ldr) ldr.innerHTML = (d.ldr ?? "--") + " %";
         if(ldrStatus) ldrStatus.innerHTML=d.ldrStatus ?? "--";
@@ -78,6 +172,8 @@ window.pakanManual=function(device){
 
 }
 
+initTempChart("esp1");
+initTempChart("esp2");
 loadESP("esp1");
 loadESP("esp2");
 
@@ -164,6 +260,26 @@ height:100%;
 width:0%;
 background:linear-gradient(90deg,#00ff9d,#00c3ff);
 transition:.4s;
+}
+
+.chart-box{
+    margin-top:20px;
+    padding:15px;
+    background:#111827;
+    border-radius:15px;
+}
+
+.chart-box h3{
+    text-align:center;
+    margin-bottom:10px;
+    color:#00ffc3;
+    font-size:17px;
+}
+
+.chart-container{
+    position:relative;
+    height:260px;
+    width:100%;
 }
 
 button{
@@ -253,6 +369,12 @@ font-size:15px;
 <div class="progress">
 <div class="fill" id="esp1_temps"></div>
 </div>
+<div class="chart-box">
+<h3>📈 Grafik Suhu Kandang 1</h3>
+<div class="chart-container">
+<canvas id="esp1_tempChart"></canvas>
+</div>
+</div>
 
 <div class="row">
 <span>💧 Humidity</span>
@@ -320,6 +442,12 @@ font-size:15px;
 <div class="progress">
 <div class="fill" id="esp2_temps"></div>
 </div>
+<div class="chart-box">
+<h3>📈 Grafik Suhu Kandang 2</h3>
+<div class="chart-container">
+<canvas id="esp2_tempChart"></canvas>
+</div>
+</div>
 
 <div class="row">
 <span>💧 Humidity</span>
@@ -367,6 +495,7 @@ font-size:15px;
 
 </div>
 <div class="footer">
+ 🦎 Grafik suhu mengambil 1 data setiap 5 menit dan menampilkan hingga 30 data terbaru.<br>
 🦎 Reptile Monitoring System<br>
 ESP32 • Firebase Realtime Database • Responsive Dashboard
 </div>
