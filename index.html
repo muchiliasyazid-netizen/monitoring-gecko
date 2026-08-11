@@ -34,10 +34,47 @@ const tempHistory = {
 };
 const tempCharts = {};
 const TEMP_GRAPH_INTERVAL = 5 * 60 * 1000; // 5 menit
+const TEMP_STORAGE_PREFIX = "reptile_temp_history_";
+const TEMP_MAX_POINTS = 30;
+
+// Memuat riwayat grafik dari browser saat halaman dibuka kembali.
+function loadTempHistory(device){
+    try{
+        const saved = localStorage.getItem(TEMP_STORAGE_PREFIX + device);
+        if(saved){
+            const data = JSON.parse(saved);
+            if(Array.isArray(data.labels) && Array.isArray(data.values)){
+                tempHistory[device].labels = data.labels.slice(-TEMP_MAX_POINTS);
+                tempHistory[device].values = data.values.slice(-TEMP_MAX_POINTS);
+                tempHistory[device].lastRecorded = Number(data.lastRecorded) || 0;
+            }
+        }
+    }catch(error){
+        console.warn("Riwayat grafik tidak dapat dimuat:", error);
+    }
+}
+
+// Menyimpan riwayat grafik sehingga tetap ada walaupun web ditutup.
+function saveTempHistory(device){
+    try{
+        localStorage.setItem(
+            TEMP_STORAGE_PREFIX + device,
+            JSON.stringify({
+                labels: tempHistory[device].labels,
+                values: tempHistory[device].values,
+                lastRecorded: tempHistory[device].lastRecorded
+            })
+        );
+    }catch(error){
+        console.warn("Riwayat grafik tidak dapat disimpan:", error);
+    }
+}
 
 function initTempChart(device){
     const canvas = document.getElementById(device+"_tempChart");
     if(!canvas) return;
+
+    loadTempHistory(device);
 
     tempCharts[device] = new Chart(canvas, {
         type: "line",
@@ -80,6 +117,11 @@ function initTempChart(device){
             }
         }
     });
+
+    // Tampilkan kembali data yang sudah tersimpan.
+    tempCharts[device].data.labels = tempHistory[device].labels;
+    tempCharts[device].data.datasets[0].data = tempHistory[device].values;
+    tempCharts[device].update("none");
 }
 
 function updateTempChart(device, suhu, waktu){
@@ -107,10 +149,13 @@ function updateTempChart(device, suhu, waktu){
     history.values.push(value);
 
     // Menampilkan maksimal 30 data terbaru agar grafik tetap ringan.
-    if(history.labels.length > 30){
+    if(history.labels.length > TEMP_MAX_POINTS){
         history.labels.shift();
         history.values.shift();
     }
+
+    // Simpan data ke browser agar tidak hilang saat halaman ditutup.
+    saveTempHistory(device);
 
     const chart = tempCharts[device];
     if(chart){
@@ -120,6 +165,29 @@ function updateTempChart(device, suhu, waktu){
     }
 }
 
+function setOfflineDisplay(device){
+    const suhu = document.getElementById(device+"_suhu");
+    const hum = document.getElementById(device+"_hum");
+    const ldr = document.getElementById(device+"_ldr");
+    const ldrStatus = document.getElementById(device+"_ldrStatus");
+    const heatpad = document.getElementById(device+"_heatpad");
+    const blower = document.getElementById(device+"_blower");
+    const waktu = document.getElementById(device+"_waktu");
+    const tempBar = document.getElementById(device+"_temps");
+    const humBar = document.getElementById(device+"_hums");
+
+    if(suhu) suhu.innerHTML = "0 °C";
+    if(hum) hum.innerHTML = "0 %";
+    if(ldr) ldr.innerHTML = "0 %";
+    if(ldrStatus) ldrStatus.innerHTML = "OFF";
+    if(heatpad) heatpad.innerHTML = "<span class='off'>OFF</span>";
+    if(blower) blower.innerHTML = "<span class='off'>OFF</span>";
+    // Waktu sengaja tidak diubah saat offline.
+    // Grafik suhu juga sengaja tidak dihapus agar data sebelumnya tetap tersimpan.
+    if(tempBar) tempBar.style.width = "0%";
+    if(humBar) humBar.style.width = "0%";
+}
+
 function loadESP(device){
 
     const refMon = ref(db,"monitoring/"+device);
@@ -127,7 +195,13 @@ function loadESP(device){
     onValue(refMon,(snap)=>{
 
         const d = snap.val();
-        if(!d) return;
+        if(!d){
+            lastUpdate[device] = 0;
+            setOfflineDisplay(device);
+            const statusEl = document.getElementById(device+"_status");
+            if(statusEl) statusEl.innerHTML = "<span class='off'>OFFLINE</span>";
+            return;
+        }
 
         lastUpdate[device]=Date.now();
 
@@ -164,6 +238,19 @@ function loadESP(device){
 
 }
 
+window.hapusGrafik=function(device){
+    if(confirm("Hapus riwayat grafik suhu " + device + "?")){
+        localStorage.removeItem(TEMP_STORAGE_PREFIX + device);
+        tempHistory[device] = {labels: [], values: [], lastRecorded: 0};
+        const chart = tempCharts[device];
+        if(chart){
+            chart.data.labels = [];
+            chart.data.datasets[0].data = [];
+            chart.update("none");
+        }
+    }
+}
+
 window.pakanManual=function(device){
 
     set(ref(db,"control/"+device+"/pakanManual"),1);
@@ -183,8 +270,10 @@ setInterval(()=>{
 
         const el=document.getElementById(device+"_status");
 
-        if(el && (!lastUpdate[device] || Date.now()-lastUpdate[device]>15000))
+        if(el && (!lastUpdate[device] || Date.now()-lastUpdate[device]>15000)){
             el.innerHTML="<span class='off'>OFFLINE</span>";
+            setOfflineDisplay(device);
+        }
 
     });
 
@@ -495,7 +584,8 @@ font-size:15px;
 
 </div>
 <div class="footer">
- 🦎 Grafik suhu mengambil 1 data setiap 5 menit dan menampilkan hingga 30 data terbaru.<br>
+ 🦎 Grafik suhu mengambil 1 data setiap 5 menit, menyimpan hingga 30 data terbaru di browser, dan tetap tersedia setelah web ditutup.<br>
+🦎 Saat ESP offline, nilai sensor menjadi 0 dan seluruh output ditampilkan OFF. Waktu terakhir dan riwayat grafik suhu tetap tersimpan.<br>
 🦎 Reptile Monitoring System<br>
 ESP32 • Firebase Realtime Database • Responsive Dashboard
 </div>
@@ -553,7 +643,10 @@ case "Sangat Terang":
 
         const d=snap.val();
 
-        if(!d) return;
+        if(!d) {
+            setOfflineDisplay(device);
+            return;
+        }
 
         updateLDRColor(device,d.ldrStatus);
 
