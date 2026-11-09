@@ -55,6 +55,8 @@ h1 small{display:block;font-size:13px;font-weight:400;color:var(--muted);margin-
 .feed:hover:not(:disabled){transform:translateY(-1px);background:#ffab5c}
 .feed:disabled{background:var(--surface2);color:var(--muted);cursor:not-allowed}
 .sub{font-size:12px;color:var(--muted);text-align:center;margin-top:8px}
+.empty{max-width:560px;margin:40px auto;text-align:center;color:var(--muted)}
+.empty[hidden]{display:none}
 #toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:9}
 .toast{background:var(--surface2);border:1px solid var(--line);border-left:4px solid var(--ok);padding:10px 14px;border-radius:10px;font-size:14px;max-width:300px;animation:in .25s}
 .toast.warn{border-left-color:var(--bad)}
@@ -72,6 +74,7 @@ h1 small{display:block;font-size:13px;font-weight:400;color:var(--muted);margin-
 </header>
 
 <main class="grid" id="grid"></main>
+<p class="empty" id="empty">Menunggu data kandang dari Firebase… Kandang baru akan muncul otomatis saat ESP mengirim data ke <code>monitoring/&lt;nama&gt;</code>.</p>
 
 <div class="footer">
   Grafik menyimpan 1 data tiap 5 menit (maks. 48 titik) di browser ini. Saat ESP offline, nilai sensor ditampilkan 0 dan output OFF, sementara waktu terakhir dan riwayat grafik tetap tersimpan.
@@ -80,7 +83,7 @@ h1 small{display:block;font-size:13px;font-weight:400;color:var(--muted);margin-
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, onValue, onChildAdded, onChildRemoved, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const app = initializeApp({
   apiKey: "AIzaSyDt6oDqx2ZZZ3c5h0wrXVwJ5hOAtdmKw1E",
@@ -88,7 +91,8 @@ const app = initializeApp({
 });
 const db = getDatabase(app);
 
-const DEVICES = { esp1: "Kandang 1", esp2: "Kandang 2" };
+const DEVICES = {}; // terisi otomatis dari node monitoring/* di Firebase
+const nameOf = d => { const m = d.match(/(\d+)$/); return m ? "Kandang " + m[1] : d; };
 const OFFLINE_MS = 15000;      // dianggap offline jika tak ada data > 15 detik
 const GRAPH_MS = 5 * 60 * 1000; // 1 titik grafik tiap 5 menit
 const MAX_PTS = 48;
@@ -102,21 +106,21 @@ const store = {
 };
 
 const state = {};
-for(const d in DEVICES){
+function initState(d){
   const old = store.get("reptile_temp_history_" + d, null); // migrasi riwayat versi lama
   let h = store.get("reptile_hist_v2_" + d, null);
   if(!h) h = old && old.labels ? { labels: old.labels, temp: old.values || [], hum: old.labels.map(() => null), last: old.lastRecorded || 0 } : { labels: [], temp: [], hum: [], last: 0 };
   state[d] = {
     hist: h,
     range: store.get("reptile_range_" + d, { min: 24, max: 32 }),
-    lastSeen: 0, lastWaktu: null, tempState: null, cooldown: 0, chart: null
+    lastSeen: 0, tempState: null, cooldown: 0, chart: null
   };
 }
 
 /* ---------- Tampilan kartu ---------- */
 const cardHTML = d => `
 <section class="card offline" id="${d}_card">
-  <div class="top"><h2>🦎 ${DEVICES[d]}</h2><span class="pill off" id="${d}_status"><i class="dot"></i>OFFLINE</span></div>
+  <div class="top"><h2 id="${d}_name">🦎 ${DEVICES[d]}</h2><span class="pill off" id="${d}_status"><i class="dot"></i>OFFLINE</span></div>
 
   <div class="hero">
     <div><div class="lbl">Suhu</div><b id="${d}_suhu">0<span>°C</span></b></div>
@@ -156,7 +160,6 @@ const cardHTML = d => `
   <button class="feed" data-act="feed" data-d="${d}" id="${d}_feed">🍽 Beri pakan sekarang</button>
   <div class="sub" id="${d}_feedLog">Belum ada pakan manual dari browser ini</div>
 </section>`;
-$("grid").innerHTML = Object.keys(DEVICES).map(cardHTML).join("");
 
 /* ---------- Util ---------- */
 function toast(msg, warn){
@@ -266,6 +269,9 @@ function render(d, v){
   const s = state[d];
   s.lastSeen = Date.now();
   setOnline(d);
+  if(typeof v.nama === "string" && v.nama && v.nama !== DEVICES[d]){
+    DEVICES[d] = v.nama; $(d + "_name").textContent = "🦎 " + v.nama;
+  }
 
   const suhu = Number(v.suhu), hum = Number(v.humidity);
   $(d + "_suhu").innerHTML = (v.suhu ?? "--") + "<span>°C</span>";
@@ -294,16 +300,31 @@ onValue(ref(db, ".info/connected"), snap => {
   if(!ok) toast("Koneksi ke Firebase terputus. Mencoba menyambung kembali…", true);
 });
 
-for(const d in DEVICES){
+let ready = false;
+setTimeout(() => ready = true, 3000);
+const unsubs = {};
+
+function addDevice(d){
+  if(state[d] || !/^[\w-]+$/.test(d)) return;
+  DEVICES[d] = nameOf(d);
+  initState(d);
+
+  const tpl = document.createElement("template");
+  tpl.innerHTML = cardHTML(d).trim();
+  const grid = $("grid");
+  const next = [...grid.children].find(c => c.id.replace("_card", "").localeCompare(d, undefined, { numeric: true }) > 0);
+  grid.insertBefore(tpl.content.firstElementChild, next || null);
+  $("empty").hidden = true;
+
   initChart(d);
   setOffline(d);
-  onValue(ref(db, "monitoring/" + d), snap => {
+  unsubs[d] = onValue(ref(db, "monitoring/" + d), snap => {
+    if(!state[d]) return;
     const v = snap.val();
-    if(!v){ state[d].lastSeen = 0; setOffline(d); return; }
+    if(!v || typeof v !== "object"){ state[d].lastSeen = 0; setOffline(d); return; }
     render(d, v);
   }, err => toast("Gagal membaca " + DEVICES[d] + ": " + err.message, true));
 
-  // rentang suhu ideal
   const mi = $(d + "_min"), ma = $(d + "_max");
   mi.value = state[d].range.min; ma.value = state[d].range.max;
   const saveRange = () => {
@@ -317,7 +338,24 @@ for(const d in DEVICES){
 
   const lf = store.get("reptile_feed_" + d, null);
   if(lf) $(d + "_feedLog").textContent = "Pakan manual terakhir: " + new Date(lf).toLocaleString("id-ID");
+  if(ready) toast("Kandang baru terdeteksi: " + DEVICES[d]);
 }
+
+function removeDevice(d){
+  if(!state[d]) return;
+  const name = DEVICES[d];
+  if(unsubs[d]) unsubs[d]();
+  state[d].chart.destroy();
+  $(d + "_card").remove();
+  delete state[d]; delete DEVICES[d]; delete unsubs[d];
+  if(!$("grid").children.length) $("empty").hidden = false;
+  toast(name + " dihapus dari Firebase");
+}
+
+// Kandang ditemukan otomatis dari semua anak node monitoring/
+onChildAdded(ref(db, "monitoring"), snap => addDevice(snap.key),
+  err => toast("Gagal membaca daftar kandang: " + err.message, true));
+onChildRemoved(ref(db, "monitoring"), snap => removeDevice(snap.key));
 
 // Deteksi offline + "data terakhir" + hitung mundur tombol pakan
 setInterval(() => {
