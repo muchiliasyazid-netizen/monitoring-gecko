@@ -1,660 +1,389 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>Reptile Monitoring System</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+--bg:#11140f;--surface:#1a1f15;--surface2:#222a1b;--line:#2f3a26;
+--text:#e9eddf;--muted:#97a387;--heat:#ff9a3c;--humid:#5cc8e8;
+--ok:#8fd16a;--bad:#ef5b4c;--cold:#6aa9ff;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:20px;line-height:1.4}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--heat);outline-offset:2px}
+header{max-width:1200px;margin:0 auto 22px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+h1{font-size:26px;font-weight:700;letter-spacing:.3px}
+h1 small{display:block;font-size:13px;font-weight:400;color:var(--muted);margin-top:2px}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:5px 13px;border-radius:999px;font-size:13px;font-weight:600;background:var(--surface2);border:1px solid var(--line)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--bad)}
+.pill.on .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.pill.on{color:var(--ok)} .pill.off{color:var(--bad)}
+.pill.cold{color:var(--cold)} .pill.hot{color:var(--bad)} .pill.ideal{color:var(--ok)} .pill.na{color:var(--muted)}
+.grid{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:22px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;transition:opacity .3s}
+.card.offline .hero b,.card.offline .meter{opacity:.45}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.top h2{font-size:19px}
+.hero{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+.hero b{font-size:56px;line-height:1;font-weight:700;letter-spacing:-1px;color:var(--heat);transition:color .3s}
+.hero b span{font-size:22px;font-weight:500;color:var(--muted);margin-left:3px}
+.hero .lbl{color:var(--muted);font-size:13px;margin-bottom:6px}
+.meter{height:8px;background:var(--surface2);border-radius:999px;overflow:hidden;margin:14px 0 6px;position:relative}
+.meter i{display:block;height:100%;width:0;border-radius:999px;background:var(--heat);transition:width .5s,background .3s}
+.meter.h i{background:var(--humid)}
+.range{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin:10px 0 4px;flex-wrap:wrap}
+.range input{width:58px;padding:4px 6px;border-radius:8px;border:1px solid var(--line);background:var(--surface2)}
+.humrow{display:flex;justify-content:space-between;align-items:baseline;margin-top:16px}
+.humrow b{font-size:24px;color:var(--humid)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0 0}
+.stats div{background:var(--surface2);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--muted)}
+.stats strong{display:block;font-size:16px;color:var(--text)}
+.chart-box{margin-top:14px;background:var(--bg);border-radius:10px;padding:12px}
+.chart-box .bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:14px;font-weight:600}
+.chart-box .bar span{display:flex;gap:6px}
+.chart-container{position:relative;height:230px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:15px}
+.row:last-of-type{border-bottom:0}
+.row span:first-child{color:var(--muted)}
+.btn{border:1px solid var(--line);background:var(--surface2);padding:5px 11px;border-radius:8px;font-size:12px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.feed{width:100%;margin-top:16px;padding:13px;border:0;border-radius:10px;background:var(--heat);color:#1a1205;font-weight:700;font-size:16px;cursor:pointer;transition:transform .15s,background .2s}
+.feed:hover:not(:disabled){transform:translateY(-1px);background:#ffab5c}
+.feed:disabled{background:var(--surface2);color:var(--muted);cursor:not-allowed}
+.sub{font-size:12px;color:var(--muted);text-align:center;margin-top:8px}
+#toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:9}
+.toast{background:var(--surface2);border:1px solid var(--line);border-left:4px solid var(--ok);padding:10px 14px;border-radius:10px;font-size:14px;max-width:300px;animation:in .25s}
+.toast.warn{border-left-color:var(--bad)}
+@keyframes in{from{opacity:0;transform:translateX(16px)}}
+.footer{max-width:1200px;margin:26px auto 0;text-align:center;color:var(--muted);font-size:12px}
+@media(max-width:600px){body{padding:14px}h1{font-size:21px}.hero b{font-size:46px}.card{padding:16px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<header>
+  <h1>🦎 Reptile Monitoring System<small>Pantauan kandang secara langsung</small></h1>
+  <span class="pill off" id="net"><i class="dot"></i><span>Menyambung ke Firebase…</span></span>
+</header>
+
+<main class="grid" id="grid"></main>
+
+<div class="footer">
+  Grafik menyimpan 1 data tiap 5 menit (maks. 48 titik) di browser ini. Saat ESP offline, nilai sensor ditampilkan 0 dan output OFF, sementara waktu terakhir dan riwayat grafik tetap tersimpan.
+</div>
+<div id="toasts" aria-live="polite"></div>
 
 <script type="module">
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-const firebaseConfig = {
-    apiKey: "AIzaSyDt6oDqx2ZZZ3c5h0wrXVwJ5hOAtdmKw1E",
-    databaseURL:"https://gecko-c6df6-default-rtdb.asia-southeast1.firebasedatabase.app"
-};
-
-const app = initializeApp(firebaseConfig);
+const app = initializeApp({
+  apiKey: "AIzaSyDt6oDqx2ZZZ3c5h0wrXVwJ5hOAtdmKw1E",
+  databaseURL: "https://gecko-c6df6-default-rtdb.asia-southeast1.firebasedatabase.app"
+});
 const db = getDatabase(app);
 
-function badge(status){
-    return status
-        ? "<span class='on'>ON</span>"
-        : "<span class='off'>OFF</span>";
-}
+const DEVICES = { esp1: "Kandang 1", esp2: "Kandang 2" };
+const OFFLINE_MS = 15000;      // dianggap offline jika tak ada data > 15 detik
+const GRAPH_MS = 5 * 60 * 1000; // 1 titik grafik tiap 5 menit
+const MAX_PTS = 48;
+const FEED_COOLDOWN = 10;      // detik
 
-const lastUpdate = {};
-const tempHistory = {
-    esp1: {labels: [], values: [], lastRecorded: 0},
-    esp2: {labels: [], values: [], lastRecorded: 0}
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, f){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : f; }catch{ return f; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ console.warn("Gagal menyimpan:", e); } },
+  del(k){ try{ localStorage.removeItem(k); }catch{} }
 };
-const tempCharts = {};
-const TEMP_GRAPH_INTERVAL = 5 * 60 * 1000; // 5 menit
-const TEMP_STORAGE_PREFIX = "reptile_temp_history_";
-const TEMP_MAX_POINTS = 30;
 
-// Memuat riwayat grafik dari browser saat halaman dibuka kembali.
-function loadTempHistory(device){
-    try{
-        const saved = localStorage.getItem(TEMP_STORAGE_PREFIX + device);
-        if(saved){
-            const data = JSON.parse(saved);
-            if(Array.isArray(data.labels) && Array.isArray(data.values)){
-                tempHistory[device].labels = data.labels.slice(-TEMP_MAX_POINTS);
-                tempHistory[device].values = data.values.slice(-TEMP_MAX_POINTS);
-                tempHistory[device].lastRecorded = Number(data.lastRecorded) || 0;
-            }
-        }
-    }catch(error){
-        console.warn("Riwayat grafik tidak dapat dimuat:", error);
+const state = {};
+for(const d in DEVICES){
+  const old = store.get("reptile_temp_history_" + d, null); // migrasi riwayat versi lama
+  let h = store.get("reptile_hist_v2_" + d, null);
+  if(!h) h = old && old.labels ? { labels: old.labels, temp: old.values || [], hum: old.labels.map(() => null), last: old.lastRecorded || 0 } : { labels: [], temp: [], hum: [], last: 0 };
+  state[d] = {
+    hist: h,
+    range: store.get("reptile_range_" + d, { min: 24, max: 32 }),
+    lastSeen: 0, lastWaktu: null, tempState: null, cooldown: 0, chart: null
+  };
+}
+
+/* ---------- Tampilan kartu ---------- */
+const cardHTML = d => `
+<section class="card offline" id="${d}_card">
+  <div class="top"><h2>🦎 ${DEVICES[d]}</h2><span class="pill off" id="${d}_status"><i class="dot"></i>OFFLINE</span></div>
+
+  <div class="hero">
+    <div><div class="lbl">Suhu</div><b id="${d}_suhu">0<span>°C</span></b></div>
+    <span class="pill na" id="${d}_tstate">--</span>
+  </div>
+  <div class="meter"><i id="${d}_temps"></i></div>
+  <div class="range">Rentang ideal
+    <input type="number" id="${d}_min" aria-label="Suhu minimum ${DEVICES[d]}"> –
+    <input type="number" id="${d}_max" aria-label="Suhu maksimum ${DEVICES[d]}"> °C
+  </div>
+
+  <div class="humrow"><span style="color:var(--muted)">💧 Kelembapan</span><b id="${d}_hum">0 %</b></div>
+  <div class="meter h"><i id="${d}_hums"></i></div>
+
+  <div class="stats">
+    <div>Terendah<strong id="${d}_smin">--</strong></div>
+    <div>Rata-rata<strong id="${d}_savg">--</strong></div>
+    <div>Tertinggi<strong id="${d}_smax">--</strong></div>
+  </div>
+
+  <div class="chart-box">
+    <div class="bar">📈 Riwayat suhu &amp; kelembapan
+      <span><button class="btn" data-act="csv" data-d="${d}">Unduh CSV</button><button class="btn" data-act="clear" data-d="${d}">Hapus</button></span>
+    </div>
+    <div class="chart-container"><canvas id="${d}_chart"></canvas></div>
+  </div>
+
+  <div style="margin-top:12px">
+    <div class="row"><span>☀ Cahaya (LDR)</span><b id="${d}_ldr">0 %</b></div>
+    <div class="row"><span>🌞 Status cahaya</span><b id="${d}_ldrStatus">--</b></div>
+    <div class="row"><span>🔥 Heatpad</span><span class="pill off" id="${d}_heatpad"><i class="dot"></i>OFF</span></div>
+    <div class="row"><span>🌪 Blower</span><span class="pill off" id="${d}_blower"><i class="dot"></i>OFF</span></div>
+    <div class="row"><span>🕒 Waktu RTC</span><b id="${d}_waktu">--</b></div>
+    <div class="row"><span>⏱ Data terakhir</span><b id="${d}_ago">--</b></div>
+  </div>
+
+  <button class="feed" data-act="feed" data-d="${d}" id="${d}_feed">🍽 Beri pakan sekarang</button>
+  <div class="sub" id="${d}_feedLog">Belum ada pakan manual dari browser ini</div>
+</section>`;
+$("grid").innerHTML = Object.keys(DEVICES).map(cardHTML).join("");
+
+/* ---------- Util ---------- */
+function toast(msg, warn){
+  const t = document.createElement("div");
+  t.className = "toast" + (warn ? " warn" : "");
+  t.textContent = msg;
+  $("toasts").appendChild(t);
+  setTimeout(() => t.remove(), 5000);
+}
+const setPill = (el, on) => { el.className = "pill " + (on ? "on" : "off"); el.innerHTML = `<i class="dot"></i>${on ? "ON" : "OFF"}`; };
+const fmtAgo = ms => ms < 5000 ? "baru saja" : ms < 60000 ? Math.floor(ms / 1000) + " detik lalu" : Math.floor(ms / 60000) + " menit lalu";
+const LDR_COL = {
+  "Gelap": ["#2f3a26", "#e9eddf"], "Redup": ["#f59e0b", "#1a1205"],
+  "Terang": ["#8fd16a", "#11140f"], "Sangat Terang": ["#fde047", "#1a1205"]
+};
+
+/* ---------- Grafik ---------- */
+function initChart(d){
+  const s = state[d];
+  s.chart = new Chart($(d + "_chart"), {
+    type: "line",
+    data: {
+      labels: s.hist.labels,
+      datasets: [
+        { label: "Suhu (°C)", data: s.hist.temp, borderColor: "#ff9a3c", backgroundColor: "#ff9a3c", borderWidth: 2, tension: .35, pointRadius: 2, yAxisID: "y" },
+        { label: "Kelembapan (%)", data: s.hist.hum, borderColor: "#5cc8e8", backgroundColor: "#5cc8e8", borderWidth: 2, tension: .35, pointRadius: 2, yAxisID: "y2", spanGaps: true }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: { legend: { labels: { color: "#97a387", boxWidth: 12 } } },
+      scales: {
+        x: { ticks: { color: "#97a387", maxTicksLimit: 6 }, grid: { color: "#222a1b" } },
+        y: { position: "left", suggestedMin: 15, suggestedMax: 40, ticks: { color: "#ff9a3c" }, grid: { color: "#222a1b" } },
+        y2: { position: "right", min: 0, max: 100, ticks: { color: "#5cc8e8" }, grid: { drawOnChartArea: false } }
+      }
     }
+  });
+  renderStats(d);
 }
 
-// Menyimpan riwayat grafik sehingga tetap ada walaupun web ditutup.
-function saveTempHistory(device){
-    try{
-        localStorage.setItem(
-            TEMP_STORAGE_PREFIX + device,
-            JSON.stringify({
-                labels: tempHistory[device].labels,
-                values: tempHistory[device].values,
-                lastRecorded: tempHistory[device].lastRecorded
-            })
-        );
-    }catch(error){
-        console.warn("Riwayat grafik tidak dapat disimpan:", error);
-    }
+function renderStats(d){
+  const t = state[d].hist.temp.filter(Number.isFinite);
+  $(d + "_smin").textContent = t.length ? Math.min(...t).toFixed(1) + "°" : "--";
+  $(d + "_smax").textContent = t.length ? Math.max(...t).toFixed(1) + "°" : "--";
+  $(d + "_savg").textContent = t.length ? (t.reduce((a, b) => a + b, 0) / t.length).toFixed(1) + "°" : "--";
 }
 
-function initTempChart(device){
-    const canvas = document.getElementById(device+"_tempChart");
-    if(!canvas) return;
-
-    loadTempHistory(device);
-
-    tempCharts[device] = new Chart(canvas, {
-        type: "line",
-        data: {
-            labels: [],
-            datasets: [{
-                label: "Suhu (°C)",
-                data: [],
-                borderWidth: 2,
-                tension: 0.35,
-                fill: false,
-                pointRadius: 2,
-                pointHoverRadius: 5
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false,
-            plugins: {
-                legend: {
-                    display: true
-                }
-            },
-            scales: {
-                x: {
-                    title: {
-                        display: true,
-                        text: "Waktu"
-                    }
-                },
-                y: {
-                    title: {
-                        display: true,
-                        text: "Suhu (°C)"
-                    },
-                    suggestedMin: 15,
-                    suggestedMax: 40
-                }
-            }
-        }
-    });
-
-    // Tampilkan kembali data yang sudah tersimpan.
-    tempCharts[device].data.labels = tempHistory[device].labels;
-    tempCharts[device].data.datasets[0].data = tempHistory[device].values;
-    tempCharts[device].update("none");
+function recordPoint(d, suhu, hum, waktu){
+  const s = state[d], h = s.hist, now = Date.now();
+  if(!Number.isFinite(suhu)) return;
+  if(h.last && now - h.last < GRAPH_MS) return;
+  h.last = now;
+  h.labels.push(waktu || new Date().toLocaleTimeString("id-ID"));
+  h.temp.push(suhu);
+  h.hum.push(Number.isFinite(hum) ? hum : null);
+  while(h.labels.length > MAX_PTS){ h.labels.shift(); h.temp.shift(); h.hum.shift(); }
+  store.set("reptile_hist_v2_" + d, h);
+  s.chart.update("none");
+  renderStats(d);
 }
 
-function updateTempChart(device, suhu, waktu){
-    const value = Number(suhu);
-    if(!Number.isFinite(value)) return;
+/* ---------- Status suhu ---------- */
+function tempStatus(d, suhu){
+  const { min, max } = state[d].range;
+  if(!Number.isFinite(suhu)) return "na";
+  return suhu < min ? "cold" : suhu > max ? "hot" : "ideal";
+}
+const TXT = { cold: "Terlalu dingin", hot: "Terlalu panas", ideal: "Ideal", na: "--" };
+const COL = { cold: "var(--cold)", hot: "var(--bad)", ideal: "var(--heat)", na: "var(--muted)" };
 
-    const now = Date.now();
-    const history = tempHistory[device];
-
-    // Grafik hanya mengambil 1 data setiap 5 menit.
-    if(history.lastRecorded !== 0 &&
-       now - history.lastRecorded < TEMP_GRAPH_INTERVAL){
-        return;
-    }
-
-    history.lastRecorded = now;
-
-    const label = waktu || new Date().toLocaleTimeString("id-ID", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit"
-    });
-
-    history.labels.push(label);
-    history.values.push(value);
-
-    // Menampilkan maksimal 30 data terbaru agar grafik tetap ringan.
-    if(history.labels.length > TEMP_MAX_POINTS){
-        history.labels.shift();
-        history.values.shift();
-    }
-
-    // Simpan data ke browser agar tidak hilang saat halaman ditutup.
-    saveTempHistory(device);
-
-    const chart = tempCharts[device];
-    if(chart){
-        chart.data.labels = history.labels;
-        chart.data.datasets[0].data = history.values;
-        chart.update("none");
-    }
+function applyTempStatus(d, suhu, notify){
+  const st = tempStatus(d, suhu), s = state[d];
+  const pill = $(d + "_tstate");
+  pill.className = "pill " + st; pill.textContent = TXT[st];
+  $(d + "_suhu").style.color = COL[st];
+  $(d + "_temps").style.background = COL[st];
+  if(notify && st !== s.tempState && (st === "cold" || st === "hot"))
+    toast(`${DEVICES[d]}: suhu ${suhu}°C — ${TXT[st].toLowerCase()}`, true);
+  if(notify && s.tempState && s.tempState !== "ideal" && st === "ideal")
+    toast(`${DEVICES[d]}: suhu kembali ideal (${suhu}°C)`);
+  if(notify) s.tempState = st;
 }
 
-function setOfflineDisplay(device){
-    const suhu = document.getElementById(device+"_suhu");
-    const hum = document.getElementById(device+"_hum");
-    const ldr = document.getElementById(device+"_ldr");
-    const ldrStatus = document.getElementById(device+"_ldrStatus");
-    const heatpad = document.getElementById(device+"_heatpad");
-    const blower = document.getElementById(device+"_blower");
-    const waktu = document.getElementById(device+"_waktu");
-    const tempBar = document.getElementById(device+"_temps");
-    const humBar = document.getElementById(device+"_hums");
-
-    if(suhu) suhu.innerHTML = "0 °C";
-    if(hum) hum.innerHTML = "0 %";
-    if(ldr) ldr.innerHTML = "0 %";
-    if(ldrStatus) ldrStatus.innerHTML = "OFF";
-    if(heatpad) heatpad.innerHTML = "<span class='off'>OFF</span>";
-    if(blower) blower.innerHTML = "<span class='off'>OFF</span>";
-    // Waktu sengaja tidak diubah saat offline.
-    // Grafik suhu juga sengaja tidak dihapus agar data sebelumnya tetap tersimpan.
-    if(tempBar) tempBar.style.width = "0%";
-    if(humBar) humBar.style.width = "0%";
+/* ---------- Tampilan online / offline ---------- */
+function setOffline(d){
+  const s = state[d];
+  $(d + "_card").classList.add("offline");
+  const st = $(d + "_status"); st.className = "pill off"; st.innerHTML = '<i class="dot"></i>OFFLINE';
+  $(d + "_suhu").innerHTML = "0<span>°C</span>";
+  $(d + "_hum").textContent = "0 %";
+  $(d + "_ldr").textContent = "0 %";
+  const ls = $(d + "_ldrStatus"); ls.textContent = "OFF"; ls.removeAttribute("style");
+  setPill($(d + "_heatpad"), false); setPill($(d + "_blower"), false);
+  $(d + "_temps").style.width = "0%"; $(d + "_hums").style.width = "0%";
+  const pill = $(d + "_tstate"); pill.className = "pill na"; pill.textContent = "--";
+  s.tempState = null;
 }
 
-function loadESP(device){
-
-    const refMon = ref(db,"monitoring/"+device);
-
-    onValue(refMon,(snap)=>{
-
-        const d = snap.val();
-        if(!d){
-            lastUpdate[device] = 0;
-            setOfflineDisplay(device);
-            const statusEl = document.getElementById(device+"_status");
-            if(statusEl) statusEl.innerHTML = "<span class='off'>OFFLINE</span>";
-            return;
-        }
-
-        lastUpdate[device]=Date.now();
-
-        const suhu=document.getElementById(device+"_suhu");
-        const hum=document.getElementById(device+"_hum");
-        const ldr=document.getElementById(device+"_ldr");
-        const ldrStatus=document.getElementById(device+"_ldrStatus");
-        const heatpad=document.getElementById(device+"_heatpad");
-        const blower=document.getElementById(device+"_blower");
-        const waktu=document.getElementById(device+"_waktu");
-        const status=document.getElementById(device+"_status");
-        const tempBar=document.getElementById(device+"_temps");
-        const humBar=document.getElementById(device+"_hums");
-
-        if(suhu) suhu.innerHTML=(d.suhu ?? "--")+" °C";
-         updateTempChart(device, d.suhu, d.waktu);
-        if(hum) hum.innerHTML=(d.humidity ?? "--")+" %";
-        if (ldr) ldr.innerHTML = (d.ldr ?? "--") + " %";
-        if(ldrStatus) ldrStatus.innerHTML=d.ldrStatus ?? "--";
-        if(heatpad) heatpad.innerHTML=badge(d.heatpadStatus);
-        if(blower) blower.innerHTML=badge(d.blowerStatus);
-        if(waktu) waktu.innerHTML=d.waktu ?? "--";
-
-        if(tempBar)
-            tempBar.style.width=Math.min((d.suhu||0)*2,100)+"%";
-
-        if(humBar)
-            humBar.style.width=Math.min((d.humidity||0),100)+"%";
-
-        if(status)
-            status.innerHTML="<span class='on'>ONLINE</span>";
-
-    });
-
+function setOnline(d){
+  $(d + "_card").classList.remove("offline");
+  const st = $(d + "_status"); st.className = "pill on"; st.innerHTML = '<i class="dot"></i>ONLINE';
 }
 
-window.hapusGrafik=function(device){
-    if(confirm("Hapus riwayat grafik suhu " + device + "?")){
-        localStorage.removeItem(TEMP_STORAGE_PREFIX + device);
-        tempHistory[device] = {labels: [], values: [], lastRecorded: 0};
-        const chart = tempCharts[device];
-        if(chart){
-            chart.data.labels = [];
-            chart.data.datasets[0].data = [];
-            chart.update("none");
-        }
-    }
+function render(d, v){
+  const s = state[d];
+  s.lastSeen = Date.now();
+  setOnline(d);
+
+  const suhu = Number(v.suhu), hum = Number(v.humidity);
+  $(d + "_suhu").innerHTML = (v.suhu ?? "--") + "<span>°C</span>";
+  $(d + "_hum").textContent = (v.humidity ?? "--") + " %";
+  $(d + "_ldr").textContent = (v.ldr ?? "--") + " %";
+  $(d + "_waktu").textContent = v.waktu ?? "--";
+  $(d + "_temps").style.width = Math.max(0, Math.min((suhu || 0) * 2, 100)) + "%";
+  $(d + "_hums").style.width = Math.max(0, Math.min(hum || 0, 100)) + "%";
+  setPill($(d + "_heatpad"), !!v.heatpadStatus);
+  setPill($(d + "_blower"), !!v.blowerStatus);
+
+  const ls = $(d + "_ldrStatus");
+  ls.textContent = v.ldrStatus ?? "--";
+  const [bg, fg] = LDR_COL[v.ldrStatus] || ["#4b5442", "#e9eddf"];
+  Object.assign(ls.style, { background: bg, color: fg, padding: "3px 12px", borderRadius: "999px", fontSize: "14px" });
+
+  applyTempStatus(d, suhu, true);
+  recordPoint(d, suhu, hum, v.waktu);
 }
 
-window.pakanManual=function(device){
-
-    set(ref(db,"control/"+device+"/pakanManual"),1);
-
-    alert("Perintah pakan manual berhasil dikirim ke "+device);
-
-}
-
-initTempChart("esp1");
-initTempChart("esp2");
-loadESP("esp1");
-loadESP("esp2");
-
-setInterval(()=>{
-
-    ["esp1","esp2"].forEach(device=>{
-
-        const el=document.getElementById(device+"_status");
-
-        if(el && (!lastUpdate[device] || Date.now()-lastUpdate[device]>15000)){
-            el.innerHTML="<span class='off'>OFFLINE</span>";
-            setOfflineDisplay(device);
-        }
-
-    });
-
-},1000);
-
-</script>
-
-<style>
-
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-font-family:Segoe UI,Arial,sans-serif;
-}
-
-body{
-background:linear-gradient(135deg,#101820,#182848);
-min-height:100vh;
-padding:20px;
-color:white;
-}
-
-h1{
-text-align:center;
-margin-bottom:30px;
-font-size:35px;
-letter-spacing:2px;
-}
-
-.container{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(340px,1fr));
-gap:25px;
-}
-
-.card{
-background:#1f2937;
-padding:25px;
-border-radius:20px;
-box-shadow:0 10px 25px rgba(0,0,0,.45);
-transition:.3s;
-}
-
-.card:hover{
-transform:translateY(-5px);
-}
-
-.card h2{
-text-align:center;
-margin-bottom:20px;
-color:#00ffc3;
-}
-
-.row{
-display:flex;
-justify-content:space-between;
-align-items:center;
-margin:12px 0;
-font-size:18px;
-}
-
-.progress{
-height:8px;
-background:#444;
-border-radius:20px;
-overflow:hidden;
-margin-bottom:15px;
-}
-
-.fill{
-height:100%;
-width:0%;
-background:linear-gradient(90deg,#00ff9d,#00c3ff);
-transition:.4s;
-}
-
-.chart-box{
-    margin-top:20px;
-    padding:15px;
-    background:#111827;
-    border-radius:15px;
-}
-
-.chart-box h3{
-    text-align:center;
-    margin-bottom:10px;
-    color:#00ffc3;
-    font-size:17px;
-}
-
-.chart-container{
-    position:relative;
-    height:260px;
-    width:100%;
-}
-
-button{
-width:100%;
-margin-top:20px;
-padding:14px;
-border:none;
-border-radius:15px;
-background:#00d084;
-color:white;
-font-size:17px;
-font-weight:bold;
-cursor:pointer;
-transition:.3s;
-}
-
-button:hover{
-background:#00a86b;
-transform:scale(1.03);
-}
-
-.on{
-background:#16a34a;
-padding:5px 15px;
-border-radius:20px;
-}
-
-.off{
-background:#dc2626;
-padding:5px 15px;
-border-radius:20px;
-}
-
-.footer{
-text-align:center;
-margin-top:30px;
-opacity:.75;
-}
-
-@media(max-width:600px){
-
-h1{
-font-size:25px;
-}
-
-.row{
-font-size:16px;
-}
-
-.card{
-padding:18px;
-}
-
-button{
-font-size:15px;
-}
-
-}
-
-</style>
-
-</head>
-
-<body>
-
-<h1>🦎 REPTILE MONITORING SYSTEM</h1>
-
-<div class="container">
-<!-- ================= ESP 1 ================= -->
-
-<div class="card">
-
-<h2>🦎 Kandang 1</h2>
-
-<div class="row">
-<span>📶 Status ESP</span>
-<div id="esp1_status">
-<span class="off">OFFLINE</span>
-</div>
-</div>
-
-<div class="row">
-<span>🌡 Suhu</span>
-<b id="esp1_suhu">--</b>
-</div>
-
-<div class="progress">
-<div class="fill" id="esp1_temps"></div>
-</div>
-<div class="chart-box">
-<h3>📈 Grafik Suhu Kandang 1</h3>
-<div class="chart-container">
-<canvas id="esp1_tempChart"></canvas>
-</div>
-</div>
-
-<div class="row">
-<span>💧 Humidity</span>
-<b id="esp1_hum">--</b>
-</div>
-
-<div class="progress">
-<div class="fill" id="esp1_hums"></div>
-</div>
-
-<div class="row">
-<span>☀ Nilai LDR</span>
-<b id="esp1_ldr">--</b>
-</div>
-
-<div class="row">
-<span>🌞 Status LDR</span>
-<b id="esp1_ldrStatus">--</b>
-</div>
-
-<div class="row">
-<span>🔥 Heatpad</span>
-<div id="esp1_heatpad">
-<span class="off">OFF</span>
-</div>
-</div>
-
-<div class="row">
-<span>🌪 Blower</span>
-<div id="esp1_blower">
-<span class="off">OFF</span>
-</div>
-</div>
-
-<div class="row">
-<span>🕒 Waktu RTC</span>
-<b id="esp1_waktu">--</b>
-</div>
-
-<button onclick="pakanManual('esp1')">
-🍽 PAKAN MANUAL
-</button>
-
-</div>
-
-
-<!-- ================= ESP 2 ================= -->
-
-<div class="card">
-
-<h2>🦎 Kandang 2</h2>
-
-<div class="row">
-<span>📶 Status ESP</span>
-<div id="esp2_status">
-<span class="off">OFFLINE</span>
-</div>
-</div>
-
-<div class="row">
-<span>🌡 Suhu</span>
-<b id="esp2_suhu">--</b>
-</div>
-
-<div class="progress">
-<div class="fill" id="esp2_temps"></div>
-</div>
-<div class="chart-box">
-<h3>📈 Grafik Suhu Kandang 2</h3>
-<div class="chart-container">
-<canvas id="esp2_tempChart"></canvas>
-</div>
-</div>
-
-<div class="row">
-<span>💧 Humidity</span>
-<b id="esp2_hum">--</b>
-</div>
-
-<div class="progress">
-<div class="fill" id="esp2_hums"></div>
-</div>
-
-<div class="row">
-<span>☀ Nilai LDR</span>
-<b id="esp2_ldr">--</b>
-</div>
-
-<div class="row">
-<span>🌞 Status LDR</span>
-<b id="esp2_ldrStatus">--</b>
-</div>
-
-<div class="row">
-<span>🔥 Heatpad</span>
-<div id="esp2_heatpad">
-<span class="off">OFF</span>
-</div>
-</div>
-
-<div class="row">
-<span>🌪 Blower</span>
-<div id="esp2_blower">
-<span class="off">OFF</span>
-</div>
-</div>
-
-<div class="row">
-<span>🕒 Waktu RTC</span>
-<b id="esp2_waktu">--</b>
-</div>
-
-<button onclick="pakanManual('esp2')">
-🍽 PAKAN MANUAL
-</button>
-
-</div>
-
-</div>
-<div class="footer">
- 🦎 Grafik suhu mengambil 1 data setiap 5 menit, menyimpan hingga 30 data terbaru di browser, dan tetap tersedia setelah web ditutup.<br>
-🦎 Saat ESP offline, nilai sensor menjadi 0 dan seluruh output ditampilkan OFF. Waktu terakhir dan riwayat grafik suhu tetap tersimpan.<br>
-🦎 Reptile Monitoring System<br>
-ESP32 • Firebase Realtime Database • Responsive Dashboard
-</div>
-
-<script>
-
-// ========================
-// WARNA STATUS LDR
-// ========================
-function updateLDRColor(device,status){
-
-    const el=document.getElementById(device+"_ldrStatus");
-    if(!el) return;
-
-    switch(status){
-
-   case "Gelap":
-    el.style.background="#1f2937";   // Abu gelap
-    el.style.color="#fff";
-    break;
-
-case "Redup":
-    el.style.background="#f59e0b";   // Kuning
-    el.style.color="#000";
-    break;
-
-case "Terang":
-    el.style.background="#22c55e";   // Hijau
-    el.style.color="#fff";
-    break;
-
-case "Sangat Terang":
-    el.style.background="#fde047";   // Kuning terang
-    el.style.color="#000";
-    break;
-
-    default:
-        el.style.color="#fff";
-        el.style.background="#6b7280";
-
-    }
-
-    el.style.padding="5px 12px";
-    el.style.borderRadius="20px";
-}
-
-// ========================
-// UPDATE WARNA STATUS
-// ========================
-["esp1","esp2"].forEach(device=>{
-
-    const refMon=ref(db,"monitoring/"+device);
-
-    onValue(refMon,(snap)=>{
-
-        const d=snap.val();
-
-        if(!d) {
-            setOfflineDisplay(device);
-            return;
-        }
-
-        updateLDRColor(device,d.ldrStatus);
-
-    });
-
+/* ---------- Firebase ---------- */
+onValue(ref(db, ".info/connected"), snap => {
+  const ok = snap.val() === true, n = $("net");
+  n.className = "pill " + (ok ? "on" : "off");
+  n.innerHTML = `<i class="dot"></i><span>${ok ? "Terhubung ke Firebase" : "Firebase terputus"}</span>`;
+  if(!ok) toast("Koneksi ke Firebase terputus. Mencoba menyambung kembali…", true);
 });
 
-</script>
+for(const d in DEVICES){
+  initChart(d);
+  setOffline(d);
+  onValue(ref(db, "monitoring/" + d), snap => {
+    const v = snap.val();
+    if(!v){ state[d].lastSeen = 0; setOffline(d); return; }
+    render(d, v);
+  }, err => toast("Gagal membaca " + DEVICES[d] + ": " + err.message, true));
 
+  // rentang suhu ideal
+  const mi = $(d + "_min"), ma = $(d + "_max");
+  mi.value = state[d].range.min; ma.value = state[d].range.max;
+  const saveRange = () => {
+    const a = Number(mi.value), b = Number(ma.value);
+    if(!Number.isFinite(a) || !Number.isFinite(b) || a >= b){ toast("Rentang suhu tidak valid: minimum harus lebih kecil dari maksimum.", true); mi.value = state[d].range.min; ma.value = state[d].range.max; return; }
+    state[d].range = { min: a, max: b };
+    store.set("reptile_range_" + d, state[d].range);
+    if(state[d].lastSeen) applyTempStatus(d, parseFloat($(d + "_suhu").textContent), false);
+  };
+  mi.addEventListener("change", saveRange); ma.addEventListener("change", saveRange);
+
+  const lf = store.get("reptile_feed_" + d, null);
+  if(lf) $(d + "_feedLog").textContent = "Pakan manual terakhir: " + new Date(lf).toLocaleString("id-ID");
+}
+
+// Deteksi offline + "data terakhir" + hitung mundur tombol pakan
+setInterval(() => {
+  for(const d in DEVICES){
+    const s = state[d], age = Date.now() - s.lastSeen;
+    if(s.lastSeen && age > OFFLINE_MS){
+      s.lastSeen = 0; setOffline(d);
+      toast(DEVICES[d] + " offline — tidak ada data lebih dari 15 detik.", true);
+    }
+    $(d + "_ago").textContent = s.lastSeen ? fmtAgo(age) : "--";
+    if(s.cooldown > 0){
+      s.cooldown--;
+      const b = $(d + "_feed");
+      if(s.cooldown > 0) b.textContent = `Tunggu ${s.cooldown} detik…`;
+      else { b.disabled = false; b.textContent = "🍽 Beri pakan sekarang"; }
+    }
+  }
+}, 1000);
+
+/* ---------- Aksi tombol ---------- */
+async function feed(d){
+  const s = state[d];
+  if(!s.lastSeen && !confirm(DEVICES[d] + " sedang offline. Perintah baru dijalankan saat ESP kembali online. Tetap kirim?")) return;
+  const b = $(d + "_feed");
+  b.disabled = true; b.textContent = "Mengirim…";
+  try{
+    await set(ref(db, "control/" + d + "/pakanManual"), 1);
+    const now = Date.now();
+    store.set("reptile_feed_" + d, now);
+    $(d + "_feedLog").textContent = "Pakan manual terakhir: " + new Date(now).toLocaleString("id-ID");
+    toast("Perintah pakan terkirim ke " + DEVICES[d]);
+    s.cooldown = FEED_COOLDOWN;
+    b.textContent = `Tunggu ${s.cooldown} detik…`;
+  }catch(e){
+    toast("Gagal mengirim perintah pakan: " + e.message, true);
+    b.disabled = false; b.textContent = "🍽 Beri pakan sekarang";
+  }
+}
+
+function exportCSV(d){
+  const h = state[d].hist;
+  if(!h.labels.length){ toast("Belum ada data grafik untuk diunduh.", true); return; }
+  const rows = ["waktu,suhu_c,kelembapan_persen", ...h.labels.map((l, i) => `${l},${h.temp[i]},${h.hum[i] ?? ""}`)];
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv" }));
+  a.download = `riwayat_${d}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function clearHistory(d){
+  if(!confirm("Hapus riwayat grafik " + DEVICES[d] + "?")) return;
+  store.del("reptile_hist_v2_" + d); store.del("reptile_temp_history_" + d);
+  const h = state[d].hist;
+  h.labels.length = 0; h.temp.length = 0; h.hum.length = 0; h.last = 0;
+  state[d].chart.update("none");
+  renderStats(d);
+  toast("Riwayat grafik " + DEVICES[d] + " dihapus");
+}
+
+$("grid").addEventListener("click", e => {
+  const b = e.target.closest("[data-act]");
+  if(!b) return;
+  const d = b.dataset.d;
+  ({ feed, csv: exportCSV, clear: clearHistory })[b.dataset.act](d);
+});
+</script>
 </body>
 </html>
