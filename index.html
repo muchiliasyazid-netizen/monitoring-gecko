@@ -64,32 +64,53 @@ h1 small{display:block;font-size:13px;font-weight:400;color:var(--muted);margin-
 .footer{max-width:1200px;margin:26px auto 0;text-align:center;color:var(--muted);font-size:12px}
 @media(max-width:600px){body{padding:14px}h1{font-size:21px}.hero b{font-size:46px}.card{padding:16px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+#login{position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}
+#login[hidden]{display:none}
+#loginForm{width:100%;max-width:340px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:26px;display:flex;flex-direction:column;gap:12px}
+#loginForm h2{font-size:20px}
+#loginForm input{padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface2)}
+#loginErr{min-height:18px;font-size:13px;color:var(--bad)}
+.hdr-right{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 </style>
 </head>
 <body>
 
 <header>
   <h1>🦎 Reptile Monitoring System<small>Pantauan kandang secara langsung</small></h1>
-  <span class="pill off" id="net"><i class="dot"></i><span>Menyambung ke Firebase…</span></span>
+  <div class="hdr-right">
+    <span class="pill off" id="net"><i class="dot"></i><span>Menyambung ke Firebase…</span></span>
+    <button class="btn" id="logout" hidden>Keluar</button>
+  </div>
 </header>
 
 <main class="grid" id="grid"></main>
 <p class="empty" id="empty">Menunggu data kandang dari Firebase… Kandang baru akan muncul otomatis saat ESP mengirim data ke <code>monitoring/&lt;nama&gt;</code>.</p>
 
 <div class="footer">
-  Grafik menyimpan 1 data tiap 5 menit (maks. 48 titik) di browser ini. Saat ESP offline, nilai sensor ditampilkan 0 dan output OFF, sementara waktu terakhir dan riwayat grafik tetap tersimpan.
+  Grafik menyimpan 1 data tiap 5 menit (maks. 48 titik) di browser ini. Setelan siang/malam tersimpan di Firebase dan di memori ESP, sehingga ESP tetap mengatur suhu walau internet putus. Saat ESP offline, nilai sensor ditampilkan 0 dan output OFF, sementara waktu terakhir dan riwayat grafik tetap tersimpan.
+</div>
+<div id="login">
+  <form id="loginForm">
+    <h2>🦎 Masuk</h2>
+    <input type="email" id="loginEmail" placeholder="Email" autocomplete="username" required>
+    <input type="password" id="loginPass" placeholder="Password" autocomplete="current-password" required>
+    <div id="loginErr" role="alert"></div>
+    <button class="feed" style="margin-top:0" id="loginBtn" type="submit">Masuk</button>
+  </form>
 </div>
 <div id="toasts" aria-live="polite"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue, onChildAdded, onChildRemoved, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, onValue, onChildAdded, onChildRemoved, set, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 const app = initializeApp({
   apiKey: "AIzaSyDt6oDqx2ZZZ3c5h0wrXVwJ5hOAtdmKw1E",
   databaseURL: "https://gecko-c6df6-default-rtdb.asia-southeast1.firebasedatabase.app"
 });
 const db = getDatabase(app);
+const auth = getAuth(app);
 
 const DEVICES = {}; // terisi otomatis dari node monitoring/* di Firebase
 const nameOf = d => { const m = d.match(/(\d+)$/); return m ? "Kandang " + m[1] : d; };
@@ -105,6 +126,7 @@ const store = {
   del(k){ try{ localStorage.removeItem(k); }catch{} }
 };
 
+const DEF_CFG = { dMin: 28, dMax: 32, nMin: 22, nMax: 26, hS: 6, hM: 18 };
 const state = {};
 function initState(d){
   const old = store.get("reptile_temp_history_" + d, null); // migrasi riwayat versi lama
@@ -112,7 +134,7 @@ function initState(d){
   if(!h) h = old && old.labels ? { labels: old.labels, temp: old.values || [], hum: old.labels.map(() => null), last: old.lastRecorded || 0 } : { labels: [], temp: [], hum: [], last: 0 };
   state[d] = {
     hist: h,
-    range: store.get("reptile_range_" + d, { min: 24, max: 32 }),
+    cfg: store.get("reptile_cfg_" + d, { ...DEF_CFG }), range: { min: 24, max: 32 },
     lastSeen: 0, tempState: null, cooldown: 0, chart: null
   };
 }
@@ -127,10 +149,18 @@ const cardHTML = d => `
     <span class="pill na" id="${d}_tstate">--</span>
   </div>
   <div class="meter"><i id="${d}_temps"></i></div>
-  <div class="range">Rentang ideal
-    <input type="number" id="${d}_min" aria-label="Suhu minimum ${DEVICES[d]}"> –
-    <input type="number" id="${d}_max" aria-label="Suhu maksimum ${DEVICES[d]}"> °C
+  <div id="${d}_cfg">
+    <div class="range">☀ Siang <input type="number" step="0.5" id="${d}_dmin" aria-label="Suhu min siang"> – <input type="number" step="0.5" id="${d}_dmax" aria-label="Suhu max siang"> °C</div>
+    <div class="range">🌙 Malam <input type="number" step="0.5" id="${d}_nmin" aria-label="Suhu min malam"> – <input type="number" step="0.5" id="${d}_nmax" aria-label="Suhu max malam"> °C</div>
+    <div class="range">🕒 Siang mulai jam <input type="number" min="0" max="23" id="${d}_hs"> malam jam <input type="number" min="0" max="23" id="${d}_hm">
+      <button class="btn" data-act="apply" data-d="${d}">Terapkan</button></div>
   </div>
+  <div class="sub">Fase aktif: <b id="${d}_fase">--</b></div>
+  <div class="sub" id="${d}_ack">Menunggu konfirmasi ESP…</div>
+  <div class="row"><span>⚙ Mode kontrol</span><button class="btn" data-act="mode" data-d="${d}" id="${d}_mode">AUTO</button></div>
+  <div class="row" id="${d}_manual" style="display:none"><span>Kendali manual</span><span>
+    <button class="btn" data-act="hp" data-d="${d}" data-n="Heatpad" id="${d}_hpbtn">Heatpad</button>
+    <button class="btn" data-act="bl" data-d="${d}" data-n="Blower" id="${d}_blbtn">Blower</button></span></div>
 
   <div class="humrow"><span style="color:var(--muted)">💧 Kelembapan</span><b id="${d}_hum">0 %</b></div>
   <div class="meter h"><i id="${d}_hums"></i></div>
@@ -258,6 +288,7 @@ function setOffline(d){
   $(d + "_temps").style.width = "0%"; $(d + "_hums").style.width = "0%";
   const pill = $(d + "_tstate"); pill.className = "pill na"; pill.textContent = "--";
   s.tempState = null;
+  $(d + "_ack").textContent = "ESP offline — setelan akan diterapkan saat online";
 }
 
 function setOnline(d){
@@ -273,7 +304,7 @@ function render(d, v){
     DEVICES[d] = v.nama; $(d + "_name").textContent = "🦎 " + v.nama;
   }
 
-  const suhu = Number(v.suhu), hum = Number(v.humidity);
+  const suhu = v.suhu == null ? NaN : Number(v.suhu), hum = Number(v.humidity);
   $(d + "_suhu").innerHTML = (v.suhu ?? "--") + "<span>°C</span>";
   $(d + "_hum").textContent = (v.humidity ?? "--") + " %";
   $(d + "_ldr").textContent = (v.ldr ?? "--") + " %";
@@ -288,6 +319,13 @@ function render(d, v){
   const [bg, fg] = LDR_COL[v.ldrStatus] || ["#4b5442", "#e9eddf"];
   Object.assign(ls.style, { background: bg, color: fg, padding: "3px 12px", borderRadius: "999px", fontSize: "14px" });
 
+  if(v.fase){ s.fase = v.fase; refreshRange(d, v.fase); }
+  if(v.siangMin != null){
+    const c = s.cfg, ok = Number(v.siangMin) === c.dMin && Number(v.siangMax) === c.dMax && Number(v.malamMin) === c.nMin &&
+      Number(v.malamMax) === c.nMax && Number(v.jamSiang) === c.hS && Number(v.jamMalam) === c.hM;
+    $(d + "_ack").textContent = ok ? `✓ ESP memakai setelan ini · menjaga ${v.setMin}–${v.setMax} °C` : "⏳ ESP masih memakai setelan lama, menunggu pembaruan…";
+  }
+  if(v.pakanTerakhir) $(d + "_feedLog").textContent = "Pakan terakhir: " + v.pakanTerakhir;
   applyTempStatus(d, suhu, true);
   recordPoint(d, suhu, hum, v.waktu);
 }
@@ -301,7 +339,6 @@ onValue(ref(db, ".info/connected"), snap => {
 });
 
 let ready = false;
-setTimeout(() => ready = true, 3000);
 const unsubs = {};
 
 function addDevice(d){
@@ -325,16 +362,22 @@ function addDevice(d){
     render(d, v);
   }, err => toast("Gagal membaca " + DEVICES[d] + ": " + err.message, true));
 
-  const mi = $(d + "_min"), ma = $(d + "_max");
-  mi.value = state[d].range.min; ma.value = state[d].range.max;
-  const saveRange = () => {
-    const a = Number(mi.value), b = Number(ma.value);
-    if(!Number.isFinite(a) || !Number.isFinite(b) || a >= b){ toast("Rentang suhu tidak valid: minimum harus lebih kecil dari maksimum.", true); mi.value = state[d].range.min; ma.value = state[d].range.max; return; }
-    state[d].range = { min: a, max: b };
-    store.set("reptile_range_" + d, state[d].range);
-    if(state[d].lastSeen) applyTempStatus(d, parseFloat($(d + "_suhu").textContent), false);
-  };
-  mi.addEventListener("change", saveRange); ma.addEventListener("change", saveRange);
+  const fill = () => { const c = state[d].cfg;
+    for(const [id, k] of CFG_IDS) $(d + "_" + id).value = c[k]; };
+  fill(); refreshRange(d);
+  // Setelan disimpan di Firebase: sinkron antar perangkat & dibaca ESP32
+  unsubs[d + "_c"] = onValue(ref(db, "control/" + d), snap => {
+    const s = state[d]; if(!s) return;
+    const c = snap.val() || {}, p = (v, f) => (v != null && v !== "" && Number.isFinite(Number(v))) ? Number(v) : f;
+    s.cfg = { dMin: p(c.siangMin, p(c.suhuMin, DEF_CFG.dMin)), dMax: p(c.siangMax, p(c.suhuMax, DEF_CFG.dMax)),
+              nMin: p(c.malamMin, DEF_CFG.nMin), nMax: p(c.malamMax, DEF_CFG.nMax),
+              hS: p(c.jamSiang, DEF_CFG.hS), hM: p(c.jamMalam, DEF_CFG.hM) };
+    store.set("reptile_cfg_" + d, s.cfg);
+    if(!$(d + "_cfg").contains(document.activeElement)) fill();
+    refreshRange(d, s.lastSeen ? s.fase : null);
+    s.mode = c.mode === "manual" ? "manual" : "auto"; s.hp = !!c.heatpadManual; s.bl = !!c.blowerManual;
+    updateModeUI(d);
+  });
 
   const lf = store.get("reptile_feed_" + d, null);
   if(lf) $(d + "_feedLog").textContent = "Pakan manual terakhir: " + new Date(lf).toLocaleString("id-ID");
@@ -344,7 +387,7 @@ function addDevice(d){
 function removeDevice(d){
   if(!state[d]) return;
   const name = DEVICES[d];
-  if(unsubs[d]) unsubs[d]();
+  if(unsubs[d]) unsubs[d](); if(unsubs[d + "_c"]) unsubs[d + "_c"]();
   state[d].chart.destroy();
   $(d + "_card").remove();
   delete state[d]; delete DEVICES[d]; delete unsubs[d];
@@ -353,9 +396,44 @@ function removeDevice(d){
 }
 
 // Kandang ditemukan otomatis dari semua anak node monitoring/
-onChildAdded(ref(db, "monitoring"), snap => addDevice(snap.key),
-  err => toast("Gagal membaca daftar kandang: " + err.message, true));
-onChildRemoved(ref(db, "monitoring"), snap => removeDevice(snap.key));
+let started = false;
+function startListening(){
+  if(started) return;
+  started = true;
+  setTimeout(() => ready = true, 3000);
+  onChildAdded(ref(db, "monitoring"), snap => addDevice(snap.key),
+    err => toast("Gagal membaca daftar kandang: " + err.message, true));
+  onChildRemoved(ref(db, "monitoring"), snap => removeDevice(snap.key));
+}
+
+/* ---------- Login (Firebase Authentication) ---------- */
+const AUTH_ERR = {
+  "auth/invalid-credential": "Email atau password salah.",
+  "auth/invalid-email": "Format email tidak valid.",
+  "auth/user-disabled": "Akun ini dinonaktifkan.",
+  "auth/too-many-requests": "Terlalu banyak percobaan. Coba lagi beberapa menit lagi.",
+  "auth/network-request-failed": "Tidak ada koneksi internet."
+};
+onAuthStateChanged(auth, user => {
+  $("login").hidden = !!user;
+  $("logout").hidden = !user;
+  if(user) startListening();
+});
+$("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = $("loginBtn"), err = $("loginErr");
+  btn.disabled = true; err.textContent = "";
+  try{
+    await signInWithEmailAndPassword(auth, $("loginEmail").value.trim(), $("loginPass").value);
+    $("loginPass").value = "";
+  }catch(ex){
+    err.textContent = AUTH_ERR[ex.code] || "Gagal masuk: " + ex.message;
+  }finally{ btn.disabled = false; }
+});
+$("logout").addEventListener("click", async () => {
+  await signOut(auth);
+  location.reload();   // bersihkan semua listener & data di layar
+});
 
 // Deteksi offline + "data terakhir" + hitung mundur tombol pakan
 setInterval(() => {
@@ -374,6 +452,45 @@ setInterval(() => {
     }
   }
 }, 1000);
+
+/* ---------- Kontrol suhu & mode ---------- */
+const ctl = (d, k, v) => set(ref(db, "control/" + d + "/" + k), v);
+const fail = e => toast("Gagal mengirim perintah: " + e.message, true);
+function updateModeUI(d){
+  const s = state[d];
+  $(d + "_mode").textContent = s.mode === "manual" ? "MANUAL" : "AUTO";
+  $(d + "_manual").style.display = s.mode === "manual" ? "flex" : "none";
+  for(const [k, id] of [["hp", "_hpbtn"], ["bl", "_blbtn"]]){
+    const b = $(d + id); b.textContent = b.dataset.n + ": " + (s[k] ? "ON" : "OFF");
+    b.style.outline = s[k] ? "2px solid var(--ok)" : "";
+  }
+}
+const CFG_IDS = [["dmin", "dMin"], ["dmax", "dMax"], ["nmin", "nMin"], ["nmax", "nMax"], ["hs", "hS"], ["hm", "hM"]];
+const isDayAt = (c, h) => c.hS < c.hM ? (h >= c.hS && h < c.hM) : (h >= c.hS || h < c.hM);
+function refreshRange(d, fase){
+  const s = state[d], c = s.cfg;
+  const day = fase ? fase === "siang" : isDayAt(c, new Date().getHours());
+  s.range = day ? { min: c.dMin, max: c.dMax } : { min: c.nMin, max: c.nMax };
+  $(d + "_fase").textContent = (day ? "☀ Siang " : "🌙 Malam ") + `(${s.range.min}–${s.range.max} °C)`;
+  if(s.lastSeen) applyTempStatus(d, parseFloat($(d + "_suhu").textContent), false);
+}
+setInterval(() => { for(const d in DEVICES) if(state[d] && !state[d].lastSeen) refreshRange(d); }, 30000);
+
+async function applyRange(d){
+  const c = {};
+  for(const [id, k] of CFG_IDS){ const v = $(d + "_" + id).value; c[k] = v === "" ? NaN : Number(v); }
+  const okT = (a, b) => Number.isFinite(a) && Number.isFinite(b) && a < b && a >= 10 && b <= 40;
+  const okH = h => Number.isInteger(h) && h >= 0 && h <= 23;
+  if(!okT(c.dMin, c.dMax) || !okT(c.nMin, c.nMax) || !okH(c.hS) || !okH(c.hM) || c.hS === c.hM){
+    toast("Setelan tidak valid: min < max (10–40 °C), jam 0–23 dan jam siang ≠ jam malam.", true);
+    for(const [id, k] of CFG_IDS) $(d + "_" + id).value = state[d].cfg[k];
+    return;
+  }
+  try{
+    await update(ref(db, "control/" + d), { siangMin: c.dMin, siangMax: c.dMax, malamMin: c.nMin, malamMax: c.nMax, jamSiang: c.hS, jamMalam: c.hM });
+    toast("Setelan siang/malam dikirim ke " + DEVICES[d]);
+  }catch(e){ fail(e); }
+}
 
 /* ---------- Aksi tombol ---------- */
 async function feed(d){
@@ -420,7 +537,10 @@ $("grid").addEventListener("click", e => {
   const b = e.target.closest("[data-act]");
   if(!b) return;
   const d = b.dataset.d;
-  ({ feed, csv: exportCSV, clear: clearHistory })[b.dataset.act](d);
+  ({ feed, csv: exportCSV, clear: clearHistory, apply: applyRange,
+     mode: d => ctl(d, "mode", state[d].mode === "manual" ? "auto" : "manual").catch(fail),
+     hp: d => ctl(d, "heatpadManual", state[d].hp ? 0 : 1).catch(fail),
+     bl: d => ctl(d, "blowerManual", state[d].bl ? 0 : 1).catch(fail) })[b.dataset.act](d);
 });
 </script>
 </body>
